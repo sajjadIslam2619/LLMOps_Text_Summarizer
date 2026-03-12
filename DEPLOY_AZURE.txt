@@ -1,0 +1,82 @@
+Azure App Service deployment – Text Summarizer (Docker Hub image)
+================================================================
+
+Image: sajjadislam1926/flan-t5-text-summarizer-app
+Docker Hub: https://hub.docker.com/repository/docker/sajjadislam1926/flan-t5-text-summarizer-app/general
+
+Prerequisites
+-------------
+- Azure CLI installed and logged in: az login
+- Docker image already pushed to Docker Hub (public, or you have credentials)
+
+
+1. Create resource group and App Service plan
+---------------------------------------------
+
+Set variables (change region/names if you like):
+
+  RESOURCE_GROUP="rg-text-summarizer"
+  LOCATION="eastus"
+  PLAN_NAME="plan-text-summarizer"
+  APP_NAME="text-summarizer-app"
+  IMAGE="sajjadislam1926/flan-t5-text-summarizer-app:1.0"
+
+Create resource group:
+
+  az group create --name $RESOURCE_GROUP --location $LOCATION
+
+Create App Service plan (Linux, for containers):
+
+  az appservice plan create --name $PLAN_NAME --resource-group $RESOURCE_GROUP --is-linux --sku B1
+
+
+2. Create Web App using your Docker Hub image
+---------------------------------------------
+
+  az webapp create --name $APP_NAME --resource-group $RESOURCE_GROUP --plan $PLAN_NAME --deployment-container-image-name $IMAGE
+
+If your Docker Hub repo is private, add registry credentials:
+
+  az webapp config container set --name $APP_NAME --resource-group $RESOURCE_GROUP --docker-custom-image-name $IMAGE --docker-registry-server-url https://index.docker.io/v1/ --docker-registry-server-user <your-dockerhub-username> --docker-registry-server-password <your-dockerhub-password-or-token>
+
+
+3. Configure port and environment variables
+------------------------------------------
+
+The app listens on port 5001. Set the port and your Azure Blob model URL:
+
+Tell App Service to use port 5001:
+
+  az webapp config appsettings set --name $APP_NAME --resource-group $RESOURCE_GROUP --settings WEBSITES_PORT=5001
+
+Required: URL to your model.zip in Azure Blob (with SAS token if private):
+
+  az webapp config appsettings set --name $APP_NAME --resource-group $RESOURCE_GROUP --settings AZURE_MODEL_BLOB_URL="https://<your-storage-account>.blob.core.windows.net/<container>/model.zip?<sas_token>"
+
+Replace the placeholder with your actual blob URL (from the notebook / Azure Storage).
+
+
+4. Optional: enable continuous deployment from Docker Hub
+---------------------------------------------------------
+
+  az webapp config appsettings set --name $APP_NAME --resource-group $RESOURCE_GROUP --settings DOCKER_ENABLE_CI=true
+
+
+5. Open the live app
+-------------------
+
+Get the app URL:
+
+  az webapp show --name $APP_NAME --resource-group $RESOURCE_GROUP --query defaultHostName -o tsv
+
+Open in browser: https://<defaultHostName>  (e.g. https://text-summarizer-app.azurewebsites.net)
+
+
+Summary
+-------
+Step 1: Create resource group and App Service plan (Linux)
+Step 2: Create Web App with image sajjadislam1926/flan-t5-text-summarizer-app
+Step 3: Set WEBSITES_PORT=5001 and AZURE_MODEL_BLOB_URL
+Step 4: Open the app URL in browser
+
+If the app name "text-summarizer-app" is taken in Azure, pick another APP_NAME (e.g. sajjad-summarizer). The name must be globally unique across *.azurewebsites.net.

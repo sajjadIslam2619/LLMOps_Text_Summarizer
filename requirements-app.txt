@@ -1,0 +1,9 @@
+# Dependencies for the summarizer Flask app (app.py)
+# Install with: pip install -r requirements-app.txt
+flask>=3.0.0
+python-dotenv>=1.0.0
+gunicorn>=21.0
+mlflow>=2.0
+transformers>=4.56,<5
+torch
+accelerate

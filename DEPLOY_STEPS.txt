@@ -1,0 +1,93 @@
+Steps: Train, pick best model, build Docker image, and deploy summarizer app (model in Azure Blob Storage)
+================================================================================
+
+1. Train and log models with the notebook
+   - Open the notebook `summarization_llm_MLflow_experiments.ipynb`.
+   - Run the cells that train the Flan-T5 summarization model and log runs
+     to MLflow (including metrics such as ROUGE-L).
+   - Make sure the runs are logged to an MLflow experiment you can see in the UI.
+
+2. Pick the best model from MLflow
+   - In the MLflow UI, open the experiment used by
+     `summarization_llm_MLflow_experiments.ipynb`.
+   - Compare runs by metrics (e.g. ROUGE-L) and note the run_id of the best run
+     (or the registered model name and version if you use the registry).
+
+3. Export the chosen model to a folder
+   - Use MLflow (via the notebook or a small helper script) to export the chosen
+     run or registered model into a folder (e.g. `model/`) in your project.
+   - Ensure the folder contains the full MLflow model (MLmodel, model files, etc.).
+
+4. Zip the model folder and upload to Azure Blob Storage
+   - Create a zip of the model folder so that the zip contents are the model
+     files (e.g. from inside the model folder: zip -r model.zip .)
+   - Create an Azure Storage account and a blob container (e.g. "models").
+   - Upload the zip to the container (e.g. model.zip).
+   - For private containers: generate a SAS token with Read permission and
+     append it to the blob URL, e.g.:
+     https://<account>.blob.core.windows.net/<container>/model.zip?<sas_token>
+   - Copy the full blob URL (with SAS if private). You will pass this as
+     AZURE_MODEL_BLOB_URL when running or deploying the app.
+
+5. Build the Docker image (no model inside the image)
+   - From the project root (where the Dockerfile is), run:
+     docker build -t text-summarizer-app:1.0 .
+     (The trailing "." is required — it is the build context path.)
+   - The image does not include the model; the app will download it from
+     Azure Blob at startup using the URL you provide.
+
+6. Test the image locally
+   - Run with your blob URL (replace with your actual URL):
+     docker run -p 5001:5001 -e AZURE_MODEL_BLOB_URL="https://<account>.blob.core.windows.net/<container>/model.zip?<sas>" text-summarizer-app:1.0
+   - Open http://localhost:5001, paste text, and confirm summarization works.
+   - First request may be slower while the model is downloaded and loaded.
+   - The container uses these environment variables:
+     - AZURE_MODEL_BLOB_URL (recommended in production): full Azure Blob URL to `model.zip`
+       with SAS token if the container is private. When set, the app downloads
+       and caches the model from this blob.
+     - MLFLOW_MODEL_URI (optional): MLflow model URI to use when
+       AZURE_MODEL_BLOB_URL is **not** set. Defaults to
+       `models:/Flan-T5-Summarization@champion`.
+     - MODEL_CACHE_DIR (optional): directory inside the container/VM where the
+       model is cached. Defaults to `/app/model` in Docker.
+     - MAX_NEW_TOKENS (optional): maximum tokens in the generated summary.
+       Defaults to `80`.
+   - Do **not** bake secrets (connection strings, SAS tokens) into the image or
+     Dockerfile. Instead, pass them as environment variables at runtime
+     (e.g. with `-e` flags, Docker Compose, or your cloud service’s settings).
+
+7. Push the image to Docker Hub
+   - Log in to Docker Hub from your terminal:
+     docker login
+   - Tag the image with your Docker Hub repository (replace <dockerhub-username>):
+     docker tag text-summarizer-app:1.0 <dockerhub-username>/text-summarizer-app:1.0
+   - Push the image to Docker Hub:
+     docker push <dockerhub-username>/text-summarizer-app:1.0
+
+8. Deploy using the Docker Hub image
+   Option A – Any VM / server
+   - On your server (with Docker installed), log in to Docker Hub if needed:
+     docker login
+   - Pull and run the container using your Docker Hub image and blob URL:
+     docker run -d -p 5001:5001 ^
+       -e AZURE_MODEL_BLOB_URL="https://<account>.blob.core.windows.net/<container>/model.zip?<sas>" ^
+       <dockerhub-username>/text-summarizer-app:1.0
+
+   Option B – Managed container services (e.g. Azure App Service, Azure Container Apps, AWS ECS, etc.)
+   - Create a container-based app using your Docker Hub image
+     (<dockerhub-username>/text-summarizer-app:1.0) and set the container port
+     to 5001.
+   - In the service’s configuration, add an environment variable
+     AZURE_MODEL_BLOB_URL = <your blob URL with SAS>.
+
+9. Open the live app
+   - Get the URL of your deployed service (VM, App Service, Container App,
+     etc.) and open it in a browser to use the summarizer in production.
+
+================================================================================
+Summary: Train and log runs in `summarization_llm_MLflow_experiments.ipynb` →
+choose best run in MLflow → export model to a folder → zip it → upload zip to
+Azure Blob Storage → build image (no model in image) → test locally with
+AZURE_MODEL_BLOB_URL → push to Docker Hub → deploy from Docker Hub and set
+AZURE_MODEL_BLOB_URL → use the app URL. The app downloads and caches the model
+from blob on first use.
