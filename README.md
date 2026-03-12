@@ -9,10 +9,16 @@ A Flask web app for **text summarization** using a fine-tuned **Flan-T5** model.
 - **`app.py`** – Flask app that serves a simple UI and a `/summarize` endpoint. It loads the Flan-T5 pipeline from either an Azure Blob URL (zip) or an MLflow model URI, then runs inference with configurable `MAX_NEW_TOKENS`.
 - **`summarization_llm_MLflow_experiments.ipynb`** – Jupyter notebook for training/evaluating Flan-T5 summarization, logging runs and metrics (e.g. ROUGE-L) to MLflow, and optionally uploading the chosen model to Azure Blob Storage.
 - **`templates/`** – HTML template for the summarizer UI.
-- **`Dockerfile`** – Builds a Linux image that runs the app with Gunicorn. The image does **not** bundle the model; the app downloads it from Azure Blob at startup when `AZURE_MODEL_BLOB_URL` is set.
+- **`Dockerfile`** – Builds a Linux image that runs the app with Gunicorn. The image does **not** bundle the model; the app loads it from **Azure Blob Storage** when `AZURE_MODEL_BLOB_URL` is set, or from the **MLflow registry** otherwise.
 - **`requirements-app.txt`** – Python dependencies for the Flask app (Flask, MLflow, transformers, PyTorch CPU-only in Docker, etc.).
 - **`DEPLOY_STEPS.txt`** – End-to-end steps: train in the notebook, pick the best run in MLflow, export and zip the model, upload to Azure Blob, build the Docker image, push to Docker Hub, and run or deploy the container.
 - **`DEPLOY_AZURE.txt`** – Commands to deploy the Docker image from Docker Hub to **Azure App Service** (resource group, plan, web app, port 5001, and `AZURE_MODEL_BLOB_URL`).
+
+---
+
+## Model source
+
+The app loads the Flan-T5 model from **Azure Blob Storage** when `AZURE_MODEL_BLOB_URL` is set (recommended for production). If that is not set, it falls back to the **MLflow model registry** using `MLFLOW_MODEL_URI` (e.g. for local development or when no blob URL is available).
 
 ---
 
@@ -81,11 +87,16 @@ Open **http://localhost:5001**, paste text, and use “Summarize”. The first r
 
 **Pre-built image (Docker Hub):** [sajjadislam1926/flan-t5-text-summarizer-app](https://hub.docker.com/repository/docker/sajjadislam1926/flan-t5-text-summarizer-app/general)
 
+The container can load the model from **Azure Blob Storage** (set `AZURE_MODEL_BLOB_URL`) or, if that is not set, from the **MLflow registry** (set `MLFLOW_MODEL_URI`; requires MLflow to be reachable from the container).
+
 From the project root:
 
 ```bash
 docker build -t text-summarizer-app:1.0 .
+# With Azure Blob (recommended): pass the blob URL to model.zip
 docker run -p 5001:5001 -e AZURE_MODEL_BLOB_URL="https://<your-storage>.blob.core.windows.net/<container>/model.zip?<sas>" text-summarizer-app:1.0
+# Or without Azure Blob: use MLflow registry (set MLFLOW_MODEL_URI and ensure MLflow is accessible)
+# docker run -p 5001:5001 -e MLFLOW_MODEL_URI="models:/Flan-T5-Summarization@champion" text-summarizer-app:1.0
 ```
 
 Then open **http://localhost:5001**. See **DEPLOY_STEPS.txt** for the full flow (including pushing to Docker Hub).
@@ -100,8 +111,8 @@ Use the commands in **DEPLOY_AZURE.txt** to create a resource group, App Service
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AZURE_MODEL_BLOB_URL` | Yes (for production) | Full URL to `model.zip` in Azure Blob (include SAS token if private). |
-| `MLFLOW_MODEL_URI` | No | MLflow model URI when not using Azure Blob (e.g. `models:/Flan-T5-Summarization@champion`). |
+| `AZURE_MODEL_BLOB_URL` | No (but recommended for production) | Full URL to `model.zip` in **Azure Blob Storage** (include SAS token if private). If set, the app loads the model from Azure Blob; if not set, it uses `MLFLOW_MODEL_URI`. |
+| `MLFLOW_MODEL_URI` | No | MLflow model URI used when **Azure Blob is not available** (e.g. `models:/Flan-T5-Summarization@champion`). |
 | `MODEL_CACHE_DIR` | No | Directory for cached model (default: `model` locally, `/app/model` in Docker). |
 | `MAX_NEW_TOKENS` | No | Max tokens for the summary (default: `80`). |
 

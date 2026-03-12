@@ -1,5 +1,7 @@
-Steps: Train, pick best model, build Docker image, and deploy summarizer app (model in Azure Blob Storage)
+Steps: Train, pick best model, build Docker image, and deploy summarizer app
 ================================================================================
+
+Model source: The app loads the model from Azure Blob Storage when AZURE_MODEL_BLOB_URL is set. If that is not set, it falls back to the MLflow model registry (MLFLOW_MODEL_URI).
 
 1. Train and log models with the notebook
    - Open the notebook `summarization_llm_MLflow_experiments.ipynb`.

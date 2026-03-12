@@ -8,6 +8,7 @@ Prerequisites
 -------------
 - Azure CLI installed and logged in: az login
 - Docker image already pushed to Docker Hub (public, or you have credentials)
+- Model: set AZURE_MODEL_BLOB_URL (Azure Blob Storage URL to model.zip) for production; if not set, the app can use MLflow registry (MLFLOW_MODEL_URI) if accessible.
 
 
 1. Create resource group and App Service plan
